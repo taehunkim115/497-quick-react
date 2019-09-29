@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import 'rbx/index.css';
 import { Button, Container, Title } from 'rbx';
+import firebase from 'firebase/app';
+import 'firebase/database';
 
 const schedule = {
   "title": "CS Courses for 2018-2019",
@@ -89,12 +91,26 @@ const getCourseNumber = course => (
   
 const Course = ({ course, state }) => (
   <Button color={ buttonColor(state.selected.includes(course)) }
-    onClick={ () => state.toggle(course) }
-    disabled={ hasConflict(course, state.selected) }
-    >
-    { getCourseTerm(course) } CS { getCourseNumber(course) }: { course.title }
-  </Button>
+      onClick={ () => state.toggle(course) }
+      onDoubleClick={ () => moveCourse(course) }
+      disabled={ hasConflict(course, state.selected) }
+      >
+      { getCourseTerm(course) } CS { getCourseNumber(course) }: { course.title }
+    </Button>
 );
+
+const moveCourse = course => {
+  const meets = prompt('Enter new meeting data, in this format:', course.meets);
+  if (!meets) return;
+  const {days} = timeParts(meets);
+  if (days) saveCourse(course, meets); 
+  else moveCourse(course);
+};
+
+const saveCourse = (course, meets) => {
+  db.child('courses').child(course.id).update({meets})
+    .catch(error => alert(error));
+};
 
 const addCourseTimes = course => ({
   ...course,
@@ -103,7 +119,7 @@ const addCourseTimes = course => ({
 
 const addScheduleTimes = schedule => ({
   title: schedule.title,
-  courses: schedule.courses.map(addCourseTimes)
+  courses: Object.values(schedule.courses).map(addCourseTimes)
 });
 
 const hasConflict = (course, selected) => (
@@ -141,26 +157,37 @@ const courseConflict = (course1, course2) => (
   && timeConflict(course1, course2)
 );
 
-const App = () => {
-  const [schedule, setSchedule] = React.useState({ title: '', courses: [] });
-  const url = 'https://courses.cs.northwestern.edu/394/data/cs-courses.php';
+const firebaseConfig = {
+  apiKey: "AIzaSyD6ueOF5l8EsHllmL9BQGhOuUlFCYo9x_k",
+  authDomain: "quick-react-1b5db.firebaseapp.com",
+  databaseURL: "https://quick-react-1b5db.firebaseio.com",
+  projectId: "quick-react-1b5db",
+  storageBucket: "",
+  messagingSenderId: "1008079974445",
+  appId: "1:1008079974445:web:708c8999a9d184837448a4",
+  measurementId: "G-BMCEEZWQES"
+};
 
-  React.useEffect(() => {
-    const fetchSchedule =  async () => {
-      const response = await fetch(url);
-      if (!response.ok) throw response;
-      const json = await response.json();
-      setSchedule(addScheduleTimes(json));
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database().ref();
+
+const App = () => {
+  const [schedule, setSchedule] = useState({ title: '', courses: [] });
+
+  useEffect(() => {
+    const handleData = snap => {
+      if (snap.val()) setSchedule(addScheduleTimes(snap.val()));
     }
-    fetchSchedule();
-  }, [])
+    db.on('value', handleData, error => alert(error));
+    return () => { db.off('value', handleData); };
+  }, []);
 
   return (
-    <div className="container">
+    <Container>
       <Banner title={ schedule.title } />
       <CourseList courses={ schedule.courses } />
-    </div>
-  );
+    </Container>
+);
 };
 
 export default App;
